@@ -1,0 +1,78 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://code.jquery.com/ui/1.13.1/jquery-ui.min.js"></script>
+
+<script>
+    // Debug version with status tracking
+    const connection = new signalR.HubConnectionBuilder()
+        .withUrl("/presentationHub", {
+            skipNegotiation: false,
+            transport: signalR.HttpTransportType.WebSockets,
+            logger: signalR.LogLevel.Debug
+        })
+        .withAutomaticReconnect({
+            nextRetryDelayInMilliseconds: retryContext => {
+                if (retryContext.elapsedMilliseconds < 30000) {
+                    return Math.random() * 2000 + 2000;
+                }
+                return null;
+            }
+        })
+        .build();
+
+    // Connection state handlers
+    connection.onreconnecting(error => {
+        console.log('Reconnecting:', error);
+        updateConnectionStatus('reconnecting');
+    });
+
+    connection.onreconnected(connectionId => {
+        console.log('Reconnected with ID:', connectionId);
+        updateConnectionStatus('connected');
+    });
+
+    connection.onclose(error => {
+        console.log('Connection closed:', error);
+        updateConnectionStatus('disconnected');
+    });
+
+    // Start connection
+    function startConnection() {
+        connection.start()
+            .then(() => {
+                console.log("Connected, ID:", connection.connectionId);
+                updateConnectionStatus('connected');
+                return connection.invoke("JoinPresentation", 
+                    window.presentationData.id, 
+                    window.presentationData.nickname);
+            })
+            .catch(err => {
+                console.error("Connection failed:", err);
+                updateConnectionStatus('error');
+                setTimeout(startConnection, 5000);
+            });
+    }
+
+    // Update UI
+    function updateConnectionStatus(status) {
+        const statusElement = document.getElementById('connectionStatus');
+        const textElement = document.getElementById('connectionStatusText');
+        
+        statusElement.className = `connection-status ${status}`;
+        
+        const statusMessages = {
+            connected: 'Live',
+            disconnected: 'Disconnected',
+            reconnecting: 'Reconnecting...',
+            error: 'Connection error'
+        };
+        textElement.textContent = statusMessages[status] || status;
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.presentationData) {
+            startConnection();
+        }
+    });
+</script>

@@ -1,0 +1,119 @@
+@model Presentation
+@{
+    ViewData["Title"] = Model.Title + " - Presentation";
+}
+
+<div class="presentation-mode">
+    <div class="slide-container">
+        @foreach (var textBlock in Model.Slides.First().TextBlocks)
+        {
+            <div class="present-text-block" 
+                 style="top: @(textBlock.Top)px; left: @(textBlock.Left)px; 
+                        width: @(textBlock.Width)px; height: @(textBlock.Height)px;">
+                @Html.Raw(Markdig.Markdown.ToHtml(textBlock.Content))
+            </div>
+        }
+    </div>
+    
+    <div class="slide-nav">
+        <button id="prevSlide" class="btn btn-secondary">&lt;</button>
+        <span id="slideCounter">1 / @Model.Slides.Count</span>
+        <button id="nextSlide" class="btn btn-secondary">&gt;</button>
+    </div>
+</div>
+
+@section Styles {
+    <style>
+        .presentation-mode {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            color: #fff;
+        }
+        
+        .slide-container {
+            width: 100%;
+            height: calc(100% - 60px);
+            position: relative;
+            background: #fff;
+            color: #000;
+        }
+        
+        .present-text-block {
+            position: absolute;
+        }
+        
+        .slide-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+        }
+        
+        #slideCounter {
+            margin: 0 20px;
+            color: #fff;
+        }
+    </style>
+}
+
+@section Scripts {
+    <script>
+        let currentSlideIndex = 0;
+        const slides = @Json.Serialize(Model.Slides.OrderBy(s => s.Order).ToArray());
+        
+        $(document).ready(function() {
+            updateSlide();
+            
+            $('#nextSlide').click(function() {
+                if (currentSlideIndex < slides.length - 1) {
+                    currentSlideIndex++;
+                    updateSlide();
+                }
+            });
+            
+            $('#prevSlide').click(function() {
+                if (currentSlideIndex > 0) {
+                    currentSlideIndex--;
+                    updateSlide();
+                }
+            });
+            
+            // Keyboard navigation
+            $(document).keydown(function(e) {
+                if (e.key === 'ArrowRight') {
+                    $('#nextSlide').click();
+                } else if (e.key === 'ArrowLeft') {
+                    $('#prevSlide').click();
+                } else if (e.key === 'Escape') {
+                    window.close();
+                }
+            });
+        });
+        
+        function updateSlide() {
+            const slide = slides[currentSlideIndex];
+            $('.slide-container').empty();
+            
+            slide.textBlocks.forEach(function(block) {
+                $('.slide-container').append(
+                    '<div class="present-text-block" ' +
+                    'style="top: ' + block.top + 'px; left: ' + block.left + 'px; ' +
+                    'width: ' + block.width + 'px; height: ' + block.height + 'px;">' +
+                    marked.parse(block.content) +
+                    '</div>'
+                );
+            });
+            
+            $('#slideCounter').text((currentSlideIndex + 1) + ' / ' + slides.length);
+        }
+    </script>
+}

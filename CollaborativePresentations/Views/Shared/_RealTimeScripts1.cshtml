@@ -1,0 +1,162 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://code.jquery.com/ui/1.13.1/jquery-ui.min.js"></script>
+
+<script>
+    // Connection status
+    updateConnectionStatus = (status) => {
+    const statusElement = document.getElementById('connectionStatus');
+    const textElement = document.getElementById('connectionStatusText');
+    
+    statusElement.className = 'connection-status ' + status;
+    
+    const statusTexts = {
+        connected: 'Live connection',
+        disconnected: 'Disconnected',
+        reconnecting: 'Reconnecting...'
+    };
+    textElement.textContent = statusTexts[status] || '';
+    };
+
+    // ====== TIMER FUNCTIONS HERE ======
+    let connectionStartTime;
+    let connectionTimerInterval;
+
+    function startConnectionTimer() {
+        connectionStartTime = Date.now();
+        if (connectionTimerInterval) clearInterval(connectionTimerInterval);
+        connectionTimerInterval = setInterval(updateConnectionTimer, 1000);
+        updateConnectionTimer(); // Initial update
+    }
+
+    function stopConnectionTimer() {
+        if (connectionTimerInterval) clearInterval(connectionTimerInterval);
+        const durationElement = document.getElementById('connectionDuration');
+        if (durationElement) durationElement.textContent = '';
+    }
+
+    function updateConnectionTimer() {
+        const durationElement = document.getElementById('connectionDuration');
+        if (connectionStartTime && durationElement) {
+            const seconds = Math.floor((Date.now() - connectionStartTime) / 1000);
+            durationElement.textContent = `${Math.floor(seconds/60)}m ${seconds%60}s`;
+        }
+    }
+    // ====== END TIMER FUNCTIONS ======
+
+    // Global connection object
+    window.signalRConnection = {
+    connection: null,
+    start: function() {
+        this.connection = new signalR.HubConnectionBuilder()
+            .withUrl("/presentationHub", {
+                skipNegotiation: false,  // Keep negotiation step
+                transport: signalR.HttpTransportType.WebSockets | 
+                         signalR.HttpTransportType.LongPolling  // Fallback transport
+            })
+            .withAutomaticReconnect({
+                nextRetryDelayInMilliseconds: retryContext => {
+                    if (retryContext.elapsedMilliseconds < 60000) {
+                        return Math.random() * 2000 + 2000; // Random 2-4s delay
+                    }
+                    return null; // Stop after 60s
+                }
+            })
+            .configureLogging(signalR.LogLevel.Debug)  // More detailed logs
+            .build();
+
+            // Setup handlers before starting
+            this.setupHandlers();
+            
+            this.connection.start()
+                .then(() => {
+                    console.log("SignalR Connected.");
+                    updateConnectionStatus('connected'); // <-- Add this
+                    startConnectionTimer(); // <-- Add this
+                    return this.connection.invoke("JoinPresentation", 
+                        window.presentationData.id, 
+                        window.presentationData.nickname);
+                })
+                .catch(err => {
+                    console.error("Connection failed: ", err.toString());
+                    updateConnectionStatus('disconnected'); // <-- Add this
+                });
+        },
+        
+        setupHandlers: function() {
+            this.connection.on("UserJoined", (nickname) => {
+                console.log(`${nickname} joined the presentation.`);
+            });
+            
+            this.connection.on("UpdateUserList", (users) => {
+                const $userList = $('#userList').empty();
+                users.forEach(user => {
+                    $userList.append(
+                        `<li class="list-group-item d-flex justify-content-between align-items-center">
+                            ${user.nickname}
+                            <span class="badge ${user.isEditor ? 'bg-primary' : 'bg-secondary'} rounded-pill">
+                                ${user.isEditor ? 'Editor' : 'Viewer'}
+                            </span>
+                        </li>`
+                    );
+                });
+            });
+            
+            this.connection.onreconnecting(() => {
+                updateConnectionStatus('reconnecting');
+                document.getElementById('connectionStatus').className = 
+                    'connection-status reconnecting';
+            });
+
+            this.connection.onreconnected(() => {
+                updateConnectionStatus('connected');
+                document.getElementById('connectionStatus').className = 
+                    'connection-status connected';
+                startConnectionTimer(); // 
+            });
+
+            this.connection.onclose(() => {
+                updateConnectionStatus('disconnected');
+                stopConnectionTimer(); 
+                console.log("SignalR Disconnected. Attempting to reconnect...");
+                setTimeout(() => this.start(), 5000);
+            });
+
+            this.connection.on("TextBlockUpdated", (textBlock) => {
+                const $existingBlock = $(`.text-block[data-block-id="${textBlock.id}"]`);
+                if ($existingBlock.length) {
+                    $existingBlock.css({
+                        top: `${textBlock.top}px`,
+                        left: `${textBlock.left}px`,
+                        width: `${textBlock.width}px`,
+                        height: `${textBlock.height}px`
+                    }).find('.text-content').html(marked.parse(textBlock.content))
+                      .siblings('.text-edit').val(textBlock.content);
+                } else {
+                    addTextBlockToUI(textBlock);
+                }
+            });
+        }
+    };
+
+    // Initialize Bootstrap tooltip
+    $(function () {
+        $('[data-bs-toggle="tooltip"]').tooltip();
+    });
+
+    // Start the connection when the script loads
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.presentationData) {
+            window.signalRConnection.start();
+        }
+    });
+
+    // Global editor function
+    window.makeEditor = function(connectionId, isEditor) {
+        window.signalRConnection.connection.invoke("MakeEditor", 
+            window.presentationData.id, 
+            connectionId, 
+            isEditor
+        ).catch(console.error);
+    };
+</script>

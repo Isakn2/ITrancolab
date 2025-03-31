@@ -1,0 +1,121 @@
+/* Presentation-specific styles */
+.slide-thumbnail {
+    width: 100%;
+    height: 100px;
+    background: #f0f0f0;
+    margin-bottom: 10px;
+    cursor: pointer;
+    position: relative;
+    border: 2px solid transparent;
+}
+
+.slide-thumbnail.active {
+    border-color: #0d6efd;
+}
+
+.slide-thumbnail .slide-number {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    background: rgba(0,0,0,0.5);
+    color: white;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.text-block {
+    cursor: move;
+    min-height: 50px;
+    min-width: 100px;
+}
+
+.text-block:hover {
+    border-color: #0d6efd !important;
+}
+
+/* Presentation mode fullscreen */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+.connection-status {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    transition: all 0.3s ease;
+  }
+  .connection-status.connected {
+    background: #28a745;
+    box-shadow: 0 0 8px #28a745;
+  }
+  .connection-status.disconnected {
+    background: #dc3545;
+  }
+  .connection-status.reconnecting {
+    background: #ffc107;
+    animation: pulse 1.5s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+  }
+
+/* Add to your presentation.css */
+.connection-container {
+    display: inline-block;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.connection-status {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+.connection-text {
+    display: inline-block;
+    vertical-align: middle;
+}
+
+.connection-status-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+    display: block;
+}
+
+.connection-duration {
+    font-size: 0.7rem;
+    color: #6c757d;
+    display: block;
+}
+
+/* Status colors */
+.connection-status.connected {
+    background: #28a745;
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.5);
+}
+
+.connection-status.disconnected {
+    background: #dc3545;
+}
+
+.connection-status.reconnecting {
+    background: #ffc107;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+}

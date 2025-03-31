@@ -1,0 +1,258 @@
+@model Presentation
+@{
+    ViewData["Title"] = Model.Title;
+    var nickname = ViewBag.Nickname;
+    var presentationId = ViewBag.PresentationId;
+}
+
+<div class="presentation-container">
+    <div class="slides-panel">
+        @foreach (var slide in Model.Slides.OrderBy(s => s.Order))
+        {
+            <div class="slide-thumbnail" data-slide-id="@slide.Id">
+                <div class="slide-number">@(slide.Order + 1)</div>
+            </div>
+        }
+        <button id="addSlideBtn" class="btn btn-primary mt-2">Add Slide</button>
+    </div>
+    
+    <div class="slide-editor">
+        <div class="toolbar">
+            <button id="addTextBtn" class="btn btn-secondary">Add Text</button>
+            <button id="presentBtn" class="btn btn-success">Present</button>
+        </div>
+        <div class="slide-content">
+            @foreach (var textBlock in Model.Slides.First().TextBlocks)
+            {
+                <div class="text-block" data-block-id="@textBlock.Id" 
+                     style="top: @(textBlock.Top)px; left: @(textBlock.Left)px; 
+                            width: @(textBlock.Width)px; height: @(textBlock.Height)px;">
+                    <div class="text-content">@Html.Raw(Markdig.Markdown.ToHtml(textBlock.Content))</div>
+                    <textarea class="text-edit">@textBlock.Content</textarea>
+                </div>
+            }
+        </div>
+    </div>
+    
+    <div class="users-panel">
+        <h5>Connected Users</h5>
+        <ul id="userList" class="list-group">
+            <!-- Users will be populated via SignalR -->
+        </ul>
+    </div>
+</div>
+
+@section Styles {
+    <style>
+        .presentation-container {
+            display: flex;
+            height: calc(100vh - 150px);
+        }
+        
+        .slides-panel {
+            width: 200px;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        
+        .slide-editor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .toolbar {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .slide-content {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: #f9f9f9;
+        }
+        
+        .users-panel {
+            width: 250px;
+            border-left: 1px solid #ddd;
+            padding: 10px;
+            overflow-y: auto;
+        }
+        
+        .text-block {
+            position: absolute;
+            border: 1px dashed #ccc;
+            padding: 5px;
+            background: white;
+        }
+        
+        .text-block .text-content {
+            display: block;
+            height: 100%;
+            overflow: auto;
+        }
+        
+        .text-block .text-edit {
+            display: none;
+            width: 100%;
+            height: 100%;
+            resize: none;
+        }
+        
+        .text-block.editing .text-content {
+            display: none;
+        }
+        
+        .text-block.editing .text-edit {
+            display: block;
+        }
+    </style>
+}
+
+@section Scripts {
+    <script>
+        // Shared variables - will be used in _RealTimeScripts.cshtml
+        window.presentationData = {
+            id: '@Model.Id',
+            nickname: '@ViewBag.Nickname'
+        };
+    </script>
+    
+    @await Html.PartialAsync("_RealTimeScripts")
+    
+    <script>
+        $(document).ready(function() {
+            setupUI();
+        });
+        
+        function setupUI() {
+            // Add slide button
+            $('#addSlideBtn').click(function() {
+                $.post('/Presentation/AddSlide', { 
+                    presentationId: window.presentationData.id 
+                }).done(function() {
+                    location.reload();
+                });
+            });
+            
+            // Present button
+            $('#presentBtn').click(function() {
+                window.open('/Presentation/Present/' + presentationId, '_blank');
+            });
+            
+            // Add text block
+            $('#addTextBtn').click(function() {
+                const newBlock = {
+                    id: generateId(),
+                    slideId: $('.slide-thumbnail.active').data('slide-id'),
+                    content: 'Edit me...',
+                    top: 100,
+                    left: 100,
+                    width: 300,
+                    height: 200
+                };
+                
+                // Add to UI
+                addTextBlockToUI(newBlock);
+                
+                // Send to server
+                connection.invoke('UpdateTextBlock', presentationId, newBlock);
+            });
+            
+            // Text block interactions
+            $(document).on('dblclick', '.text-block', function() {
+                const $block = $(this);
+                $block.addClass('editing');
+                $block.find('.text-edit').focus();
+            });
+            
+            $(document).on('blur', '.text-edit', function() {
+                const $block = $(this).closest('.text-block');
+                $block.removeClass('editing');
+                
+                const updatedBlock = {
+                    id: $block.data('block-id'),
+                    slideId: $('.slide-thumbnail.active').data('slide-id'),
+                    content: $(this).val(),
+                    top: parseInt($block.css('top')),
+                    left: parseInt($block.css('left')),
+                    width: parseInt($block.css('width')),
+                    height: parseInt($block.css('height'))
+                };
+                
+                // Update preview
+                $block.find('.text-content').html(marked.parse(updatedBlock.content));
+                
+                // Send to server
+                connection.invoke('UpdateTextBlock', presentationId, updatedBlock);
+            });
+            
+            // Make text blocks draggable and resizable
+            $(document).on('mouseover', '.text-block', function() {
+                $(this).draggable({
+                    stop: function(event, ui) {
+                        const $block = $(this);
+                        const updatedBlock = {
+                            id: $block.data('block-id'),
+                            slideId: $('.slide-thumbnail.active').data('slide-id'),
+                            content: $block.find('.text-edit').val(),
+                            top: ui.position.top,
+                            left: ui.position.left,
+                            width: parseInt($block.css('width')),
+                            height: parseInt($block.css('height'))
+                        };
+                        
+                        connection.invoke('UpdateTextBlock', presentationId, updatedBlock);
+                    }
+                }).resizable({
+                    stop: function(event, ui) {
+                        const $block = $(this);
+                        const updatedBlock = {
+                            id: $block.data('block-id'),
+                            slideId: $('.slide-thumbnail.active').data('slide-id'),
+                            content: $block.find('.text-edit').val(),
+                            top: parseInt($block.css('top')),
+                            left: parseInt($block.css('left')),
+                            width: ui.size.width,
+                            height: ui.size.height
+                        };
+                        
+                        connection.invoke('UpdateTextBlock', presentationId, updatedBlock);
+                    }
+                });
+            });
+            
+            // Slide selection
+            $('.slide-thumbnail').first().addClass('active');
+            $('.slide-thumbnail').click(function() {
+                $('.slide-thumbnail').removeClass('active');
+                $(this).addClass('active');
+                loadSlide($(this).data('slide-id'));
+            });
+        }
+        
+        function loadSlide(slideId) {
+            // Implement slide loading
+        }
+        
+        function addTextBlockToUI(block) {
+            const $block = $('<div class="text-block" data-block-id="' + block.id + '" ' +
+                'style="top: ' + block.top + 'px; left: ' + block.left + 'px; ' +
+                'width: ' + block.width + 'px; height: ' + block.height + 'px;">' +
+                '<div class="text-content">' + marked.parse(block.content) + '</div>' +
+                '<textarea class="text-edit">' + block.content + '</textarea>' +
+                '</div>');
+                
+            $('.slide-content').append($block);
+        }
+        
+        function generateId() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+    </script>
+}
